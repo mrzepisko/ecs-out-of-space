@@ -32,6 +32,7 @@ namespace Data {
     [System.Serializable]
     public struct ResourceDepositData : IComponentData {
         public ResourceType Type;
+        public GainPlan Capacity;
         public float Amount;
     }
 

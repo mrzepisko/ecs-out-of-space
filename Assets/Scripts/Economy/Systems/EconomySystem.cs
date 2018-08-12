@@ -32,9 +32,11 @@ public class EconomySystem : ComponentSystem {
 
     public struct ResourceDepositEntity {
         public ResourceDepositComponent deposit;
+        public BuildingLevelComponent level;
     }
 
     protected override void OnUpdate() {
+        float dt = Time.deltaTime;
         energyAvailable = 0f;
         energyRequired = 0f;
 
@@ -65,30 +67,46 @@ public class EconomySystem : ComponentSystem {
         //resource generation
         resourceGeneration.Clear();
         foreach (BuildingEntity entity in GetEntities<BuildingEntity>()) {
-            AddResource(entity.resource.Value.ResourceType, entity.resource.Value.Levels.Evaluate(entity.level.Value, entity.effectiveness.Value));
+            AddResourceGeneration(entity.resource.Value.ResourceType, entity.resource.Value.Levels.Evaluate(entity.level.Value, entity.effectiveness.Value) * dt);
         }
 
-
-        //deposit
-        float dt = Time.deltaTime;
-        foreach (ResourceDepositEntity entity in GetEntities<ResourceDepositEntity>()) {
-            for (int i = 0; i < entity.deposit.Value.Length; i++) {
-                float value;
-                if (resourceGeneration.TryGetValue(entity.deposit.Value[i].Type, out value)) {
-                    entity.deposit.Value[i].Amount += value * dt;
+        //deposit resources
+        {
+            var entities = GetEntities<ResourceDepositEntity>();
+            for (int i = 0; i < entities.Length; i++) {
+                var entity = entities[i];
+                foreach (ResourceType key in System.Enum.GetValues(typeof(ResourceType))) {
+                    float value;
+                    if (!resourceGeneration.TryGetValue(key, out value) || value <= 0f) {
+                        continue;
+                    }
+                    float deposited = DepositResource(key, value, ref entity);
+                    resourceGeneration[key] -= deposited;
                 }
             }
         }
     }
 
-    void AddResource(ResourceType resource, float value) {
+    void AddResourceGeneration(ResourceType resource, float value) {
         float newValue;
         if (resourceGeneration.TryGetValue(resource, out newValue)) {
-            newValue += value;
+            resourceGeneration[resource] += value;
         } else {
-            newValue = value;
+            resourceGeneration.Add(resource, value);
         }
-        resourceGeneration.Add(resource, newValue);
+
+    }
+
+    float DepositResource(ResourceType resource, float value, ref ResourceDepositEntity entity) {
+        float val;
+        if (resource.Equals(entity.deposit.Value.Type) && resourceGeneration.TryGetValue(resource, out val)) {
+            float availableSpace = entity.deposit.Value.Capacity.Evaluate(entity.level.Value) - entity.deposit.Value.Amount;
+            float depositValue = Mathf.Min(availableSpace, value);
+            entity.deposit.Value.Amount += depositValue;
+            return depositValue;
+        } else {
+            return 0f;
+        }
     }
 
 }
